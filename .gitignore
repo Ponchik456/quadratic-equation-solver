@@ -1,0 +1,11 @@
+build/ 
+.vs/ 
+*.exe 
+*.user 
+*.suo 
+Debug/ 
+Release/ 
+x64/ 
+.vscode/ 
+*.out 
+*.o 
