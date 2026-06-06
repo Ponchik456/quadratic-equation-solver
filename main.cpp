@@ -1,5 +1,5 @@
 #include "include/quadratic_solver.h"
-#include "include/interpreter.h"
+#include "include/expression.h"
 #include <iostream>
 #include <string>
 
@@ -8,7 +8,6 @@
 #endif
 
 int main() {
-    // Настройка русской кодировки для Windows
     #ifdef _WIN32
     SetConsoleOutputCP(65001);
     SetConsoleCP(65001);
@@ -18,14 +17,19 @@ int main() {
     std::cout << "Введите коэффициенты a, b, c (через пробел): ";
     std::getline(std::cin, input);
     
-    interpreter::QuadraticInterpreter interpreter;
+    interpreter::Context context(input);
+    interpreter::QuadraticExpression expr;
     
-    if (!interpreter.validate(input)) {
-        std::cout << "WRONG\n";
+    if (!expr.interpret(context)) {
+        std::cout << "WRONG" << std::endl;
         return 0;
     }
     
-    QuadraticSolver solver(interpreter.getA(), interpreter.getB(), interpreter.getC());
+    big::BigNumber a(expr.getA());
+    big::BigNumber b(expr.getB());
+    big::BigNumber c(expr.getC());
+    
+    QuadraticSolver solver(a, b, c);
     QuadraticResult result = solver.solve();
     
     std::cout << QuadraticSolver::resultToString(result);
