@@ -1,110 +1,120 @@
 #include "../include/quadratic_solver.h"
-#include <cmath>
 #include <sstream>
-#include <algorithm>
 #include <iomanip>
+#include <cmath>
 
-QuadraticSolver::QuadraticSolver(const std::string& a_str, const std::string& b_str, const std::string& c_str) {
-    a_val = std::stod(a_str);
-    b_val = std::stod(b_str);
-    c_val = std::stod(c_str);
+QuadraticSolver::QuadraticSolver(const big::BigNumber& a_val, const big::BigNumber& b_val, const big::BigNumber& c_val)
+    : a(a_val), b(b_val), c(c_val) {}
+
+bool QuadraticSolver::isZero(const big::BigNumber& num) const {
+    return num.toString() == "0";
+}
+
+big::BigNumber QuadraticSolver::discriminant() const {
+    // D = b^2 - 4*a*c
+    big::BigNumber four(4);
+    big::BigNumber ac = a * c;
+    big::BigNumber four_ac = four * ac;
+    big::BigNumber b_squared = b * b;
+    
+    return b_squared - four_ac;
+}
+
+int QuadraticSolver::compareToZero(const big::BigNumber& num) const {
+    std::string s = num.toString();
+    if (s == "0") return 0;
+    
+    // Проверяем знак
+    if (s[0] == '-') return -1;
+    return 1;
 }
 
 QuadraticResult QuadraticSolver::solve() {
     QuadraticResult result;
     
-    double a = a_val;
-    double b = b_val;
-    double c = c_val;
-    
-    const double EPS = 1e-12;
-    
-    // Проверка на вырожденные случаи
-    if (std::abs(a) < EPS && std::abs(b) < EPS && std::abs(c) < EPS) {
+    // a = b = c = 0
+    if (isZero(a) && isZero(b) && isZero(c)) {
         result.type = SolutionType::INF;
         return result;
     }
     
-    if (std::abs(a) < EPS && std::abs(b) < EPS) {
+    // a = b = 0, c != 0
+    if (isZero(a) && isZero(b)) {
         result.type = SolutionType::NO_SOLUTION;
         return result;
     }
     
-    // Линейное уравнение (a == 0)
-    if (std::abs(a) < EPS) {
-        // bx + c = 0 => x = -c/b
-        double x = -c / b;
+    // Линейное уравнение (a = 0)
+    if (isZero(a)) {
+        big::BigNumber x = (-c) / b;
         result.type = SolutionType::OK;
-        result.roots.push_back(big::BigNumber(std::to_string(x)));
+        result.roots.push_back(x);
         return result;
     }
     
-    // Квадратное уравнение: a*x^2 + b*x + c = 0
-    double D = b * b - 4 * a * c;
+    // Квадратное уравнение
+    big::BigNumber D = discriminant();
+    int D_cmp = compareToZero(D);
     
-    if (D < -EPS) {
-        result.type = SolutionType::NO_SOLUTION;
-        return result;
+    // D < 0 - комплексные корни
+    if (D_cmp < 0) {
+        big::BigNumber two(2);
+        big::BigNumber denominator = two * a;
+        big::BigNumber real = (-b) / denominator;
+        
+        // Мнимая часть: sqrt(|D|) / (2*a)
+        big::BigNumber abs_D = D;
+        if (abs_D.isNegative()) {
+            abs_D = -abs_D;
+        }
+        big::BigNumber imag = abs_D.sqrt() / denominator;
+        if (imag.isNegative()) {
+            imag = -imag;
+        }
+        
+        // Проверяем, что мнимая часть не нулевая
+        if (compareToZero(imag) != 0) {
+            result.type = SolutionType::OK;
+            result.complex_real.push_back(real);
+            result.complex_imag.push_back(imag);
+            result.complex_real.push_back(real);
+            result.complex_imag.push_back(-imag);
+            return result;
+        } else {
+            // Если мнимая часть нулевая - это действительный корень
+            result.type = SolutionType::OK;
+            result.roots.push_back(real);
+            return result;
+        }
     }
     
-    if (std::abs(D) < EPS) {
-        // Один корень
-        double x = -b / (2 * a);
+    // D = 0 - один корень
+    if (D_cmp == 0) {
+        big::BigNumber two(2);
+        big::BigNumber denominator = two * a;
+        big::BigNumber x = (-b) / denominator;
         result.type = SolutionType::OK;
-        result.roots.push_back(big::BigNumber(formatDouble(x)));
+        result.roots.push_back(x);
         return result;
     }
     
-    // Два корня
-    double sqrt_D = std::sqrt(D);
-    double x1 = (-b - sqrt_D) / (2 * a);
-    double x2 = (-b + sqrt_D) / (2 * a);
+    // D > 0 - два корня
+    big::BigNumber sqrt_D = D.sqrt();
+    big::BigNumber two(2);
+    big::BigNumber denominator = two * a;
     
-    // Сортируем корни
+    big::BigNumber x1 = (-b - sqrt_D) / denominator;
+    big::BigNumber x2 = (-b + sqrt_D) / denominator;
+    
     if (x1 > x2) {
         std::swap(x1, x2);
     }
     
     result.type = SolutionType::OK;
-    result.roots.push_back(big::BigNumber(formatDouble(x1)));
-    result.roots.push_back(big::BigNumber(formatDouble(x2)));
+    result.roots.push_back(x1);
+    result.roots.push_back(x2);
     
     return result;
-}
-
-std::string QuadraticSolver::formatDouble(double value) {
-    std::stringstream ss;
-    
-    // Проверка на целое число
-    double int_part;
-    double frac_part = std::modf(value, &int_part);
-    
-    if (std::abs(frac_part) < 1e-12) {
-        // Целое число
-        ss << static_cast<long long>(int_part);
-    } else {
-        // Дробное число с точностью до 6 знаков
-        ss << std::fixed << std::setprecision(10) << value;
-        std::string str = ss.str();
-        
-        // Убираем лишние нули
-        str.erase(str.find_last_not_of('0') + 1, std::string::npos);
-        if (str.back() == '.') str.pop_back();
-        
-        // Ограничиваем до 6 знаков после запятой
-        size_t dot_pos = str.find('.');
-        if (dot_pos != std::string::npos && str.length() - dot_pos - 1 > 6) {
-            ss.str("");
-            ss << std::fixed << std::setprecision(6) << value;
-            str = ss.str();
-            str.erase(str.find_last_not_of('0') + 1, std::string::npos);
-            if (str.back() == '.') str.pop_back();
-        }
-        
-        return str;
-    }
-    
-    return ss.str();
 }
 
 std::string QuadraticSolver::resultToString(const QuadraticResult& result) {
@@ -113,9 +123,50 @@ std::string QuadraticSolver::resultToString(const QuadraticResult& result) {
     switch (result.type) {
         case SolutionType::OK:
             output = "OK\n";
-            output += std::to_string(result.roots.size()) + "\n";
-            for (const auto& root : result.roots) {
-                output += root.toString() + "\n";
+            if (!result.roots.empty()) {
+                output += std::to_string(result.roots.size()) + "\n";
+                for (const auto& root : result.roots) {
+                    std::string root_str = root.toString();
+                    // Убираем лишние .0
+                    size_t dot = root_str.find('.');
+                    if (dot != std::string::npos) {
+                        root_str.erase(root_str.find_last_not_of('0') + 1);
+                        if (root_str.back() == '.') root_str.pop_back();
+                    }
+                    // Убираем +0 и -0 в мнимой части
+                    if (root_str == "-0") root_str = "0";
+                    output += root_str + "\n";
+                }
+            } else if (!result.complex_real.empty()) {
+                output += std::to_string(result.complex_real.size()) + "\n";
+                for (size_t i = 0; i < result.complex_real.size(); i++) {
+                    std::string real = result.complex_real[i].toString();
+                    std::string imag = result.complex_imag[i].toString();
+                    
+                    // Форматируем действительную часть
+                    size_t dot = real.find('.');
+                    if (dot != std::string::npos) {
+                        real.erase(real.find_last_not_of('0') + 1);
+                        if (real.back() == '.') real.pop_back();
+                    }
+                    if (real == "-0") real = "0";
+                    
+                    // Форматируем мнимую часть
+                    dot = imag.find('.');
+                    if (dot != std::string::npos) {
+                        imag.erase(imag.find_last_not_of('0') + 1);
+                        if (imag.back() == '.') imag.pop_back();
+                    }
+                    
+                    // Пропускаем нулевую мнимую часть
+                    if (imag == "0" || imag == "-0") {
+                        output += real + "\n";
+                    } else if (imag[0] == '-') {
+                        output += real + imag + "i\n";
+                    } else {
+                        output += real + "+" + imag + "i\n";
+                    }
+                }
             }
             break;
         case SolutionType::INF:
