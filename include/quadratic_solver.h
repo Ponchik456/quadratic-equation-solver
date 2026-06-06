@@ -14,17 +14,21 @@ enum class SolutionType {
 
 struct QuadraticResult {
     SolutionType type;
-    std::vector<big::BigNumber> roots;
+    std::vector<big::BigNumber> roots;        // действительные корни
+    std::vector<big::BigNumber> complex_real; // действительная часть комплексных
+    std::vector<big::BigNumber> complex_imag; // мнимая часть комплексных
 };
 
 class QuadraticSolver {
 private:
-    double a_val, b_val, c_val;
+    big::BigNumber a, b, c;
     
-    std::string formatDouble(double value);
+    bool isZero(const big::BigNumber& num) const;
+    int compareToZero(const big::BigNumber& num) const;
+    big::BigNumber discriminant() const;
     
 public:
-    QuadraticSolver(const std::string& a_str, const std::string& b_str, const std::string& c_str);
+    QuadraticSolver(const big::BigNumber& a_val, const big::BigNumber& b_val, const big::BigNumber& c_val);
     
     QuadraticResult solve();
     
