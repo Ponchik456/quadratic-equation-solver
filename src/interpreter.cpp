@@ -1,42 +1,131 @@
 #include "../include/interpreter.h"
-#include <regex>
-#include <sstream>
 
 namespace interpreter {
 
-NumberExpression::NumberExpression(const std::string& num) : number(num) {}
+// ==================== Context ====================
 
-bool NumberExpression::interpret(const std::string& context) {
-    return context == number;
+void Context::skipWhitespace() {
+    while (position < input.length() && std::isspace(input[position])) {
+        position++;
+    }
 }
+
+bool Context::match(char expected) {
+    skipWhitespace();
+    if (position < input.length() && input[position] == expected) {
+        position++;
+        return true;
+    }
+    return false;
+}
+
+bool Context::matchNumber() {
+    skipWhitespace();
+    if (position >= input.length()) return false;
+    
+    size_t start = position;
+    
+    // Знак
+    if (input[position] == '+' || input[position] == '-') {
+        position++;
+    }
+    
+    // Цифры (обязательны)
+    bool hasDigits = false;
+    while (position < input.length() && std::isdigit(input[position])) {
+        position++;
+        hasDigits = true;
+    }
+    
+    // Дробная часть (опционально)
+    if (position < input.length() && input[position] == '.') {
+        position++;
+        while (position < input.length() && std::isdigit(input[position])) {
+            position++;
+            hasDigits = true;
+        }
+    }
+    
+    // Экспоненциальная запись (опционально)
+    if (position < input.length() && (input[position] == 'e' || input[position] == 'E')) {
+        position++;
+        if (position < input.length() && (input[position] == '+' || input[position] == '-')) {
+            position++;
+        }
+        bool hasExpDigits = false;
+        while (position < input.length() && std::isdigit(input[position])) {
+            position++;
+            hasExpDigits = true;
+        }
+        if (!hasExpDigits) {
+            // Если после e нет цифр - это не число
+            position = start;
+            return false;
+        }
+    }
+    
+    return hasDigits && position > start;
+}
+
+std::string Context::getNumber() {
+    size_t start = position;
+    matchNumber();
+    return input.substr(start, position - start);
+}
+
+// ==================== NumberExpression ====================
+
+NumberExpression::NumberExpression() : value("") {}
+
+bool NumberExpression::interpret(Context& context) {
+    size_t start = context.getPosition();
+    if (context.matchNumber()) {
+        value = context.getRemaining().substr(0, context.getPosition() - start);
+        return true;
+    }
+    return false;
+}
+
+// ==================== CoefficientExpression ====================
+
+bool CoefficientExpression::interpret(Context& context) {
+    size_t start = context.getPosition();
+    
+    if (context.matchNumber()) {
+        value = context.getRemaining().substr(0, context.getPosition() - start);
+        return true;
+    }
+    return false;
+}
+
+// ==================== QuadraticExpression ====================
+
+QuadraticExpression::QuadraticExpression() {}
+
+bool QuadraticExpression::interpret(Context& context) {
+    if (!a_expr.interpret(context)) return false;
+    if (!b_expr.interpret(context)) return false;
+    if (!c_expr.interpret(context)) return false;
+    
+    context.skipWhitespace();
+    return context.isEnd();
+}
+
+// ==================== NumberFormatExpression ====================
 
 bool NumberFormatExpression::isValidNumber(const std::string& str) {
     if (str.empty()) return false;
     
-    // Регулярное выражение для валидации числа
-    // Позволяет: знак, цифры, одну десятичную точку
-    std::regex number_pattern(R"(^[+-]?\d+(?:\.\d+)?$)");
-    
-    if (!std::regex_match(str, number_pattern)) {
-        return false;
-    }
-    
-    // Проверка на слишком много ведущих нулей
-    size_t start = (str[0] == '+' || str[0] == '-') ? 1 : 0;
-    if (str[start] == '0' && str.length() > start + 1 && str[start + 1] != '.') {
-        return false;
-    }
-    
-    return true;
+    // Поддерживаем: целые числа, дробные, научную нотацию
+    std::regex numberPattern(R"(^[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$)");
+    return std::regex_match(str, numberPattern);
 }
 
 bool NumberFormatExpression::interpret(const std::string& context) {
     return isValidNumber(context);
 }
 
-QuadraticInterpreter::QuadraticInterpreter() {
-    expressions.push_back(std::make_unique<NumberFormatExpression>());
-}
+// ==================== QuadraticInterpreter ====================
 
 bool QuadraticInterpreter::parseCoefficients(const std::string& input) {
     std::istringstream iss(input);
@@ -46,17 +135,15 @@ bool QuadraticInterpreter::parseCoefficients(const std::string& input) {
         return false;
     }
     
-    // Проверка, что больше ничего нет
     std::string extra;
     if (iss >> extra) {
         return false;
     }
     
-    // Валидация каждого коэффициента
-    NumberFormatExpression format_check;
-    if (!format_check.interpret(a_val) ||
-        !format_check.interpret(b_val) ||
-        !format_check.interpret(c_val)) {
+    NumberFormatExpression formatCheck;
+    if (!formatCheck.interpret(a_val) ||
+        !formatCheck.interpret(b_val) ||
+        !formatCheck.interpret(c_val)) {
         return false;
     }
     
