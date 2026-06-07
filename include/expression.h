@@ -2,74 +2,138 @@
 #define EXPRESSION_H
 
 #include <string>
-#include <memory>
-#include <vector>
 #include <cctype>
 
 namespace interpreter {
 
-// ==================== Context ====================
 class Context {
 private:
     std::string input;
-    size_t position;
+    size_t pos;
     
 public:
-    Context(const std::string& str);
+    Context(const std::string& str) : input(str), pos(0) {}
     
-    char current() const;
-    void advance();
-    void skipWhitespace();
-    bool match(char expected);
-    bool parseNumber(std::string& result);
-    bool isEnd() const;
-    size_t getPosition() const;
-    void setPosition(size_t pos);
-    std::string getRemaining() const;
+    void skipWhitespace() {
+        while (pos < input.length() && std::isspace(input[pos])) {
+            pos++;
+        }
+    }
+    
+    bool parseNumber(std::string& result) {
+        skipWhitespace();
+        if (pos >= input.length()) return false;
+        
+        size_t start = pos;
+        
+        // Знак
+        if (input[pos] == '+' || input[pos] == '-') pos++;
+        
+        // inf, nan, infinity (разрешены как корректные числа)
+        if (pos < input.length() && (input[pos] == 'i' || input[pos] == 'n')) {
+            std::string lower;
+            size_t temp = pos;
+            while (temp < input.length() && std::isalpha(input[temp])) {
+                lower += std::tolower(input[temp]);
+                temp++;
+            }
+            if (lower == "inf" || lower == "infinity" || lower == "nan") {
+                pos = temp;
+                result = input.substr(start, pos - start);
+                return true;
+            }
+        }
+        
+        // Цифры
+        bool hasDigits = false;
+        while (pos < input.length() && std::isdigit(input[pos])) {
+            pos++;
+            hasDigits = true;
+        }
+        
+        // Дробная часть
+        if (pos < input.length() && input[pos] == '.') {
+            pos++;
+            while (pos < input.length() && std::isdigit(input[pos])) {
+                pos++;
+                hasDigits = true;
+            }
+        }
+        
+        // Экспоненциальная часть (научная нотация)
+        if (pos < input.length() && (input[pos] == 'e' || input[pos] == 'E')) {
+            pos++;
+            if (pos < input.length() && (input[pos] == '+' || input[pos] == '-')) pos++;
+            bool hasExp = false;
+            while (pos < input.length() && std::isdigit(input[pos])) {
+                pos++;
+                hasExp = true;
+            }
+            if (!hasExp) {
+                pos = start;
+                return false;
+            }
+        }
+        
+        if (!hasDigits) {
+            pos = start;
+            return false;
+        }
+        
+        result = input.substr(start, pos - start);
+        return true;
+    }
+    
+    bool isEnd() {
+        skipWhitespace();
+        return pos >= input.length();
+    }
 };
 
-// ==================== AbstractExpression ====================
-class Expression {
-public:
-    virtual ~Expression() = default;
-    virtual bool interpret(Context& context) = 0;
-};
-
-// ==================== TerminalExpression: Number ====================
-class NumberExpression : public Expression {
+// Terminal Expression: число
+class NumberExpression {
 private:
     std::string value;
-    
 public:
-    bool interpret(Context& context) override;
+    bool interpret(Context& ctx) {
+        if (ctx.parseNumber(value)) {
+            return true;
+        }
+        return false;
+    }
     std::string getValue() const { return value; }
 };
 
-// ==================== NonTerminalExpression: Coefficient ====================
-class CoefficientExpression : public Expression {
+// NonTerminal Expression: коэффициент
+class CoefficientExpression {
 private:
-    std::unique_ptr<NumberExpression> number;
+    NumberExpression num;
     std::string value;
-    
 public:
-    CoefficientExpression();
-    bool interpret(Context& context) override;
+    bool interpret(Context& ctx) {
+        if (num.interpret(ctx)) {
+            value = num.getValue();
+            return true;
+        }
+        return false;
+    }
     std::string getValue() const { return value; }
 };
 
-// ==================== NonTerminalExpression: Quadratic ====================
-class QuadraticExpression : public Expression {
+// NonTerminal Expression: квадратное уравнение (a, b, c)
+class QuadraticExpression {
 private:
-    std::unique_ptr<CoefficientExpression> a_expr;
-    std::unique_ptr<CoefficientExpression> b_expr;
-    std::unique_ptr<CoefficientExpression> c_expr;
-    
+    CoefficientExpression a, b, c;
 public:
-    QuadraticExpression();
-    bool interpret(Context& context) override;
-    std::string getA() const;
-    std::string getB() const;
-    std::string getC() const;
+    bool interpret(Context& ctx) {
+        if (!a.interpret(ctx)) return false;
+        if (!b.interpret(ctx)) return false;
+        if (!c.interpret(ctx)) return false;
+        return ctx.isEnd();
+    }
+    std::string getA() const { return a.getValue(); }
+    std::string getB() const { return b.getValue(); }
+    std::string getC() const { return c.getValue(); }
 };
 
 } // namespace interpreter
