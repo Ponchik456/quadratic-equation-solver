@@ -32,7 +32,8 @@ int main() {
     QuadraticSolver solver(a, b, c);
     QuadraticResult result = solver.solve();
     
-    std::cout << QuadraticSolver::resultToString(result);
+    // resultToString теперь нестатический метод
+    std::cout << solver.resultToString(result);
     
     return 0;
 }
